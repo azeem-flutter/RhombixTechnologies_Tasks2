@@ -90,8 +90,17 @@ class SignUpScreen extends StatelessWidget {
                       value,
                       authController.passwordController.text,
                     ),
-                    obscureText: !authController.isPasswordVisible.value,
+                    obscureText: !authController.isConfirmPasswordVisible.value,
                     prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        authController.isConfirmPasswordVisible.value
+                            ? Icons.visibility_off
+                            : Icons.visibility,
+                      ),
+                      onPressed:
+                          authController.toggleIsConfirmPasswordVisibility,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 32),

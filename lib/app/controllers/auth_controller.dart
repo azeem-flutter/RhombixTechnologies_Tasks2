@@ -11,7 +11,7 @@ class AuthController extends GetxController {
   final Rx<UserModel?> currentUser = Rx<UserModel?>(null);
   final RxBool isLoading = false.obs;
   final RxBool isPasswordVisible = false.obs;
-
+  final RxBool isConfirmPasswordVisible = false.obs;
   // Form controllers
   final TextEditingController nameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
@@ -38,6 +38,10 @@ class AuthController extends GetxController {
   // Toggle password visibility
   void togglePasswordVisibility() {
     isPasswordVisible.value = !isPasswordVisible.value;
+  }
+
+  void toggleIsConfirmPasswordVisibility() {
+    isConfirmPasswordVisible.value = !isConfirmPasswordVisible.value;
   }
 
   // Sign up with email and password
