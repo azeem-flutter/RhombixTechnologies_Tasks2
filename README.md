@@ -1,6 +1,6 @@
 # Rhombix Technologies – Internship Task 2
 
-This repository contains Task 2 of the Flutter internship at Rhombix Technologies.
+Flutter internship Task 2 for Rhombix Technologies. This project demonstrates Flutter UI development, Firebase integration, and clean app architecture as part of the internship assignment.
 
 ## Project Overview
 A Flutter application developed as part of the internship to demonstrate UI development, Firebase integration, and structured app architecture.
