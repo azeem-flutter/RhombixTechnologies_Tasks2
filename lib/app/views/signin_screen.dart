@@ -68,30 +68,7 @@ class SignInScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
-
-                // Forgot Password
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () {
-                      Get.snackbar(
-                        'Info',
-                        'Forgot password feature coming soon',
-                      );
-                    },
-                    child: Text(
-                      'Forgot Password?',
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: isDark
-                            ? AppColors.primaryDark
-                            : AppColors.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 36),
 
                 // Sign In Button
                 Obx(
@@ -103,38 +80,6 @@ class SignInScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
-
-                // Divider
-                Row(
-                  children: [
-                    const Expanded(child: Divider()),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        'OR',
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: isDark
-                              ? AppColors.textSecondaryDark
-                              : AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                    const Expanded(child: Divider()),
-                  ],
-                ),
-                const SizedBox(height: 24),
-
-                // Social Sign In (Optional - for demo)
-                CustomButton(
-                  text: 'Continue with Google',
-                  onPressed: () {
-                    Get.snackbar('Info', 'Google sign-in coming soon');
-                  },
-                  width: double.infinity,
-                  outlined: true,
-                  icon: Icons.g_mobiledata,
-                ),
-                const SizedBox(height: 32),
 
                 // Sign Up Link
                 Row(

@@ -87,14 +87,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           data['icon']!,
                           style: const TextStyle(fontSize: 120),
                         ),
-                        const SizedBox(height: 60),
+                        const SizedBox(height: 40),
                         // Title
                         Text(
                           data['title']!,
                           style: AppTextStyles.heading1,
                           textAlign: TextAlign.center,
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 15),
                         // Description
                         Text(
                           data['description']!,
