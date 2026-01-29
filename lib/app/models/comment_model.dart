@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class CommentModel {
   final String id;
   final String artworkId;
@@ -5,7 +7,7 @@ class CommentModel {
   final String userName;
   final String? userImage;
   final String text;
-  final DateTime timestamp;
+  final DateTime createdAt;
 
   CommentModel({
     required this.id,
@@ -14,55 +16,30 @@ class CommentModel {
     required this.userName,
     this.userImage,
     required this.text,
-    required this.timestamp,
+    required this.createdAt,
   });
 
-  // Convert CommentModel to Map for Firestore
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
       'artworkId': artworkId,
       'userId': userId,
       'userName': userName,
       'userImage': userImage,
       'text': text,
-      'timestamp': timestamp.toIso8601String(),
+      'createdAt': Timestamp.fromDate(createdAt),
     };
   }
 
-  // Create CommentModel from Firestore document
-  factory CommentModel.fromMap(Map<String, dynamic> map) {
+  factory CommentModel.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data()!;
     return CommentModel(
-      id: map['id'] ?? '',
-      artworkId: map['artworkId'] ?? '',
-      userId: map['userId'] ?? '',
-      userName: map['userName'] ?? '',
-      userImage: map['userImage'],
-      text: map['text'] ?? '',
-      timestamp: DateTime.parse(
-        map['timestamp'] ?? DateTime.now().toIso8601String(),
-      ),
-    );
-  }
-
-  // Copy with method
-  CommentModel copyWith({
-    String? id,
-    String? artworkId,
-    String? userId,
-    String? userName,
-    String? userImage,
-    String? text,
-    DateTime? timestamp,
-  }) {
-    return CommentModel(
-      id: id ?? this.id,
-      artworkId: artworkId ?? this.artworkId,
-      userId: userId ?? this.userId,
-      userName: userName ?? this.userName,
-      userImage: userImage ?? this.userImage,
-      text: text ?? this.text,
-      timestamp: timestamp ?? this.timestamp,
+      id: doc.id,
+      artworkId: data['artworkId'],
+      userId: data['userId'],
+      userName: data['userName'],
+      userImage: data['userImage'],
+      text: data['text'],
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
 }

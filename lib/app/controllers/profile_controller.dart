@@ -1,176 +1,265 @@
-import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:arthub/app/controllers/auth_controller.dart';
+import 'package:arthub/app/models/artwork_model.dart';
+import 'package:arthub/app/models/user_model.dart';
+import 'package:arthub/app/services/cloudinary_configure.dart';
+import 'package:arthub/app/services/error_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
-// import 'package:firebase_storage/firebase_storage.dart';
-// import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/user_model.dart';
-import '../models/artwork_model.dart';
+import 'package:http/http.dart' as http;
 
 class ProfileController extends GetxController {
-  // final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  // final FirebaseStorage _storage = FirebaseStorage.instance;
+  static ProfileController get instance => Get.find();
+
+  final AuthController authController = Get.find<AuthController>();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final ImagePicker _picker = ImagePicker();
 
-  final Rx<UserModel?> user = Rx<UserModel?>(null);
-  final RxList<ArtworkModel> userArtworks = <ArtworkModel>[].obs;
+  // =============================
+  // STATE
+  // =============================
   final RxBool isLoading = false.obs;
   final RxBool isUploading = false.obs;
 
-  final TextEditingController nameController = TextEditingController();
-  final TextEditingController bioController = TextEditingController();
+  final RxInt artworksCount = 0.obs;
+  final RxInt favoritesCount = 0.obs;
+  final RxInt totalViewsCount = 0.obs;
 
+  final RxList<ArtworkModel> userArtworks = <ArtworkModel>[].obs;
+
+  final nameController = TextEditingController();
+  final bioController = TextEditingController();
+
+  UserModel? get _currentUser => authController.currentUser.value;
+  UserModel? get user => _currentUser;
+
+  // =============================
+  // LIFECYCLE
+  // =============================
   @override
   void onInit() {
     super.onInit();
-    loadUserProfile();
+    debugPrint('🔥 ProfileController INIT');
   }
 
-  // Load user profile
-  // Firestore: Fetch user document by userId
-  Future<void> loadUserProfile() async {
-    try {
-      isLoading.value = true;
+  @override
+  void onReady() {
+    super.onReady();
 
-      // TODO: Fetch from Firestore
-      // String userId = FirebaseAuth.instance.currentUser!.uid;
-      // DocumentSnapshot doc = await _firestore.collection('users').doc(userId).get();
-      // user.value = UserModel.fromMap(doc.data() as Map<String, dynamic>);
-
-      // Demo data
-      user.value = UserModel(
-        id: 'demo_user',
-        name: 'John Doe',
-        email: 'john@arthub.com',
-        bio: 'Digital artist & designer',
-        profileImage:
-            'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400',
-        createdAt: DateTime.now().subtract(const Duration(days: 365)),
-        favorites: ['1', '3', '5'],
-      );
-
-      nameController.text = user.value?.name ?? '';
-      bioController.text = user.value?.bio ?? '';
-
-      await fetchUserArtworks();
-    } catch (e) {
-      Get.snackbar('Error', 'Failed to load profile');
-    } finally {
-      isLoading.value = false;
+    // Handle already-logged-in user
+    final user = authController.currentUser.value;
+    if (user != null) {
+      _syncProfileFields(user);
+      _bindUserArtworks(user.id);
+      _bindUserFavorites(user.id);
+      _bindTotalViews(user.id);
     }
+
+    // React to auth changes
+    ever<UserModel?>(authController.currentUser, (user) {
+      if (user == null) return;
+
+      _syncProfileFields(user);
+      _bindUserArtworks(user.id);
+      _bindUserFavorites(user.id);
+      _bindTotalViews(user.id);
+    });
   }
 
-  // Fetch artworks uploaded by user
-  // Firestore: Query artworks where artistId equals current userId
-  Future<void> fetchUserArtworks() async {
-    try {
-      // TODO: Fetch from Firestore
-      // String userId = user.value?.id ?? '';
-      // QuerySnapshot snapshot = await _firestore
-      //     .collection('artworks')
-      //     .where('artistId', isEqualTo: userId)
-      //     .orderBy('createdAt', descending: true)
-      //     .get();
-      //
-      // userArtworks.value = snapshot.docs
-      //     .map((doc) => ArtworkModel.fromMap(doc.data() as Map<String, dynamic>))
-      //     .toList();
-
-      // Demo: Filter artworks for this user
-      userArtworks.value = [
-        ArtworkModel(
-          id: '101',
-          title: 'My First Digital Painting',
-          imageUrl:
-              'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=800',
-          description: 'Experimenting with digital brushes',
-          category: 'Digital Art',
-          artistId: 'demo_user',
-          artistName: 'John Doe',
-          likes: 45,
-          likedBy: [],
-          createdAt: DateTime.now().subtract(const Duration(days: 10)),
-          views: 234,
-        ),
-      ];
-    } catch (e) {
-      Get.snackbar('Error', 'Failed to fetch artworks');
-    }
+  // =============================
+  // PROFILE SYNC
+  // =============================
+  void _syncProfileFields(UserModel user) {
+    nameController.text = user.name;
+    bioController.text = user.bio ?? '';
   }
 
-  // Update profile info
-  // Firestore: Update user document fields (name, bio, profileImage)
+  // =============================
+  // REAL-TIME ARTWORKS (FIXED)
+  // =============================
+  void _bindUserArtworks(String userId) {
+    userArtworks.bindStream(
+      _firestore
+          .collection('artworks')
+          .where('artistId', isEqualTo: userId)
+          .snapshots()
+          .map((snapshot) {
+            final list = snapshot.docs
+                .map((doc) => ArtworkModel.fromMap(doc.id, doc.data()))
+                .toList();
+
+            list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+            artworksCount.value = list.length;
+
+            return list;
+          }),
+    );
+  }
+
+  // =============================
+  // FAVORITES: ARTWORKS LIKED BY CURRENT USER
+  // =============================
+  /// Bind real-time stream of artworks that the current user has liked.
+  /// Uses collectionGroup('likes') to find all like docs by this user,
+  /// then resolves the artwork documents.
+  void _bindUserFavorites(String userId) {
+    _firestore
+        .collection('artworks')
+        .where('artistId', isEqualTo: userId)
+        .snapshots()
+        .asyncMap((artworksSnap) async {
+          if (artworksSnap.docs.isEmpty) {
+            favoritesCount.value = 0;
+            return 0;
+          }
+
+          int totalLikes = 0;
+
+          for (final artworkDoc in artworksSnap.docs) {
+            final likeCountSnap = await artworkDoc.reference
+                .collection('likes')
+                .count()
+                .get();
+
+            totalLikes += likeCountSnap.count ?? 0;
+          }
+
+          favoritesCount.value = totalLikes;
+          return totalLikes;
+        })
+        .listen((_) {});
+  }
+
+  // =============================
+  // TOTAL VIEWS: SUM OF ALL VIEWS ON USER'S ARTWORKS
+  // =============================
+  /// Bind real-time stream to calculate total views across all artworks
+  /// created by the current user.
+  void _bindTotalViews(String userId) {
+    _firestore
+        .collection('artworks')
+        .where('artistId', isEqualTo: userId)
+        .snapshots()
+        .asyncMap((snapshot) async {
+          if (snapshot.docs.isEmpty) {
+            totalViewsCount.value = 0;
+            return 0;
+          }
+
+          int totalViews = 0;
+
+          // For each artwork, count the views subcollection
+          for (final artworkDoc in snapshot.docs) {
+            final viewsSnapshot = await artworkDoc.reference
+                .collection('views')
+                .count()
+                .get();
+            totalViews += viewsSnapshot.count ?? 0;
+          }
+
+          totalViewsCount.value = totalViews;
+          return totalViews;
+        })
+        .listen((_) {}); // Listen and update count
+  }
+
+  // =============================
+  // UPDATE PROFILE
+  // =============================
   Future<void> updateProfile() async {
+    final currentUser = _currentUser;
+    if (currentUser == null) return;
+
     try {
       isLoading.value = true;
 
-      // TODO: Update in Firestore
-      // String userId = user.value?.id ?? '';
-      // await _firestore.collection('users').doc(userId).update({
-      //   'name': nameController.text.trim(),
-      //   'bio': bioController.text.trim(),
-      // });
+      final updatedName = nameController.text.trim();
+      final updatedBio = bioController.text.trim();
 
-      user.value = user.value?.copyWith(
-        name: nameController.text.trim(),
-        bio: bioController.text.trim(),
+      await _firestore.collection('users').doc(currentUser.id).update({
+        'name': updatedName,
+        'bio': updatedBio,
+      });
+
+      authController.currentUser.value = currentUser.copyWith(
+        name: updatedName,
+        bio: updatedBio,
       );
 
-      Get.snackbar(
-        'Success',
-        'Profile updated successfully',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
+      ErrorService.showSuccess('Profile updated');
     } catch (e) {
-      Get.snackbar('Error', 'Failed to update profile');
+      ErrorService.handleError(e);
     } finally {
       isLoading.value = false;
     }
   }
 
-  // Pick and upload profile image
-  // Firebase Storage: Upload image file and get download URL
+  // =============================
+  // UPDATE PROFILE IMAGE
+  // =============================
   Future<void> updateProfileImage() async {
+    final currentUser = _currentUser;
+    if (currentUser == null) return;
+
+    final image = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+      maxWidth: 800,
+    );
+
+    if (image == null) return;
+
     try {
-      final XFile? image = await _picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 800,
-        imageQuality: 85,
-      );
-
-      if (image == null) return;
-
       isUploading.value = true;
 
-      // TODO: Upload to Firebase Storage
-      // String userId = user.value?.id ?? '';
-      // String fileName = 'profile_$userId.jpg';
-      // Reference ref = _storage.ref().child('profiles/$fileName');
-      // await ref.putFile(File(image.path));
-      // String imageUrl = await ref.getDownloadURL();
-      //
-      // await _firestore.collection('users').doc(userId).update({
-      //   'profileImage': imageUrl,
-      // });
+      final imageUrl = await _uploadToCloudinary(File(image.path));
 
-      // Demo: Use picked image path
-      user.value = user.value?.copyWith(profileImage: image.path);
+      await _firestore.collection('users').doc(currentUser.id).update({
+        'profileImage': imageUrl,
+      });
 
-      Get.snackbar(
-        'Success',
-        'Profile image updated',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
+      authController.currentUser.value = currentUser.copyWith(
+        profileImage: imageUrl,
       );
+
+      ErrorService.showSuccess('Profile image updated');
     } catch (e) {
-      Get.snackbar('Error', 'Failed to upload image');
+      ErrorService.handleError(e);
     } finally {
       isUploading.value = false;
     }
   }
 
+  // =============================
+  // CLOUDINARY
+  // =============================
+  Future<String> _uploadToCloudinary(File file) async {
+    final uri = Uri.parse(
+      'https://api.cloudinary.com/v1_1/${CloudinaryConfig.cloudName}/image/upload',
+    );
+
+    final request = http.MultipartRequest('POST', uri)
+      ..fields['upload_preset'] = CloudinaryConfig.uploadPreset
+      ..files.add(await http.MultipartFile.fromPath('file', file.path));
+
+    final response = await request.send();
+    final body = await response.stream.bytesToString();
+    final data = jsonDecode(body);
+
+    if (response.statusCode != 200) {
+      throw Exception(data['error']['message']);
+    }
+
+    return data['secure_url'];
+  }
+
+  // =============================
+  // CLEANUP
+  // =============================
   @override
   void onClose() {
     nameController.dispose();

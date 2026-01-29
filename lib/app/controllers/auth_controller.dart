@@ -1,187 +1,180 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-// import 'package:firebase_auth/firebase_auth.dart';
-// import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
+import '../services/error_service.dart';
 
 class AuthController extends GetxController {
-  // final FirebaseAuth _auth = FirebaseAuth.instance;
-  // final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static AuthController get instance => Get.find();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  /// =====================
+  /// AUTH STATE
+  /// =====================
   final Rx<UserModel?> currentUser = Rx<UserModel?>(null);
-  final RxBool isLoading = false.obs;
-  final RxBool isPasswordVisible = false.obs;
-  final RxBool isConfirmPasswordVisible = false.obs;
-  // Form controllers
-  final TextEditingController nameController = TextEditingController();
-  final TextEditingController emailController = TextEditingController();
-  final TextEditingController passwordController = TextEditingController();
-  final TextEditingController confirmPasswordController =
-      TextEditingController();
 
-  final GlobalKey<FormState> signUpFormKey = GlobalKey<FormState>();
-  final GlobalKey<FormState> signInFormKey = GlobalKey<FormState>();
+  /// =====================
+  /// SIGN UP FORM
+  /// =====================
+  final signUpFormKey = GlobalKey<FormState>();
+  final signUpNameController = TextEditingController();
+  final signUpEmailController = TextEditingController();
+  final signUpPasswordController = TextEditingController();
+  final signUpConfirmPasswordController = TextEditingController();
 
+  final RxBool isSignUpLoading = false.obs;
+  final RxBool isSignUpPasswordVisible = false.obs;
+  final RxBool isSignUpConfirmPasswordVisible = false.obs;
+
+  /// =====================
+  /// SIGN IN FORM
+  /// =====================
+  final signInFormKey = GlobalKey<FormState>();
+  final signInEmailController = TextEditingController();
+  final signInPasswordController = TextEditingController();
+
+  final RxBool isSignInLoading = false.obs;
+  final RxBool isSignInPasswordVisible = false.obs;
+
+  /// =====================
+  /// LIFECYCLE
+  /// =====================
   @override
   void onInit() {
     super.onInit();
-    // Check if user is already logged in
-    // _auth.authStateChanges().listen((User? user) {
-    //   if (user != null) {
-    //     _loadUserData(user.uid);
-    //   } else {
-    //     currentUser.value = null;
-    //   }
-    // });
+
+    _auth.authStateChanges().listen((user) {
+      if (user != null) {
+        _loadUserData(user.uid);
+      } else {
+        currentUser.value = null;
+      }
+    });
   }
 
-  // Toggle password visibility
-  void togglePasswordVisibility() {
-    isPasswordVisible.value = !isPasswordVisible.value;
-  }
+  /// =====================
+  /// UI HELPERS
+  /// =====================
+  void toggleSignUpPassword() => isSignUpPasswordVisible.toggle();
 
-  void toggleIsConfirmPasswordVisibility() {
-    isConfirmPasswordVisible.value = !isConfirmPasswordVisible.value;
-  }
+  void toggleSignUpConfirmPassword() => isSignUpConfirmPasswordVisible.toggle();
 
-  // Sign up with email and password
-  // Firebase Auth: Create new user account
+  void toggleSignInPassword() => isSignInPasswordVisible.toggle();
+
+  /// =====================
+  /// SIGN UP
+  /// =====================
   Future<void> signUp() async {
     if (!signUpFormKey.currentState!.validate()) return;
+    if (isSignUpLoading.value) return;
 
     try {
-      isLoading.value = true;
+      isSignUpLoading.value = true;
 
-      // TODO: Use FirebaseAuth to create user
-      // UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
-      //   email: emailController.text.trim(),
-      //   password: passwordController.text.trim(),
-      // );
-
-      // Create user document in Firestore
-      // final user = UserModel(
-      //   id: userCredential.user!.uid,
-      //   name: nameController.text.trim(),
-      //   email: emailController.text.trim(),
-      //   createdAt: DateTime.now(),
-      // );
-
-      // await _firestore.collection('users').doc(user.id).set(user.toMap());
-      // currentUser.value = user;
-
-      // Simulate success for demo
-      Get.snackbar(
-        'Success',
-        'Account created successfully!',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
+      final credential = await _auth.createUserWithEmailAndPassword(
+        email: signUpEmailController.text.trim(),
+        password: signUpPasswordController.text.trim(),
       );
 
+      final user = UserModel(
+        id: credential.user!.uid,
+        name: signUpNameController.text.trim(),
+        email: signUpEmailController.text.trim(),
+        bio: '',
+        profileImage: null,
+        favorites: [],
+        createdAt: DateTime.now(),
+      );
+
+      await _firestore.collection('users').doc(user.id).set(user.toMap());
+
+      currentUser.value = user;
+
+      ErrorService.showSuccess('Account created successfully');
       Get.offAllNamed('/home');
-      _clearControllers();
+      _clearSignUpControllers();
     } catch (e) {
-      Get.snackbar(
-        'Error',
-        e.toString(),
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
+      ErrorService.handleError(e);
     } finally {
-      isLoading.value = false;
+      isSignUpLoading.value = false;
     }
   }
 
-  // Sign in with email and password
-  // Firebase Auth: Sign in existing user
+  /// =====================
+  /// SIGN IN
+  /// =====================
   Future<void> signIn() async {
     if (!signInFormKey.currentState!.validate()) return;
+    if (isSignInLoading.value) return;
 
     try {
-      isLoading.value = true;
+      isSignInLoading.value = true;
 
-      // TODO: Use FirebaseAuth to sign in user
-      // UserCredential userCredential = await _auth.signInWithEmailAndPassword(
-      //   email: emailController.text.trim(),
-      //   password: passwordController.text.trim(),
-      // );
-
-      // await _loadUserData(userCredential.user!.uid);
-
-      // Simulate success for demo
-      Get.snackbar(
-        'Success',
-        'Signed in successfully!',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
+      final credential = await _auth.signInWithEmailAndPassword(
+        email: signInEmailController.text.trim(),
+        password: signInPasswordController.text.trim(),
       );
 
+      await _loadUserData(credential.user!.uid);
+
+      ErrorService.showSuccess('Signed in successfully');
       Get.offAllNamed('/home');
-      _clearControllers();
+      _clearSignInControllers();
     } catch (e) {
-      Get.snackbar(
-        'Error',
-        'Invalid email or password',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
+      ErrorService.handleError(e);
     } finally {
-      isLoading.value = false;
+      isSignInLoading.value = false;
     }
   }
 
-  // Sign out
-  // Firebase Auth: Sign out current user
+  /// =====================
+  /// SIGN OUT
+  /// =====================
   Future<void> signOut() async {
-    try {
-      // await _auth.signOut();
-      currentUser.value = null;
-      Get.offAllNamed('/signin');
-
-      Get.snackbar(
-        'Success',
-        'Signed out successfully',
-        snackPosition: SnackPosition.BOTTOM,
-      );
-    } catch (e) {
-      Get.snackbar(
-        'Error',
-        e.toString(),
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
-    }
+    await _auth.signOut();
+    currentUser.value = null;
+    Get.offAllNamed('/signin');
   }
 
-  // Load user data from Firestore
-  // Future<void> _loadUserData(String uid) async {
-  //   try {
-  //     final doc = await _firestore.collection('users').doc(uid).get();
-  //     if (doc.exists) {
-  //       currentUser.value = UserModel.fromMap(doc.data()!);
-  //     }
-  //   } catch (e) {
-  //     print('Error loading user data: $e');
-  //   }
-  // }
+  /// =====================
+  /// LOAD USER
+  /// =====================
+  Future<void> _loadUserData(String uid) async {
+    final doc = await _firestore.collection('users').doc(uid).get();
 
-  void _clearControllers() {
-    nameController.clear();
-    emailController.clear();
-    passwordController.clear();
-    confirmPasswordController.clear();
+    if (!doc.exists) {
+      await _auth.signOut();
+      throw Exception('User record not found');
+    }
+
+    currentUser.value = UserModel.fromMap(doc.data()!);
+  }
+
+  /// =====================
+  /// CLEANUP
+  /// =====================
+  void _clearSignUpControllers() {
+    signUpNameController.clear();
+    signUpEmailController.clear();
+    signUpPasswordController.clear();
+    signUpConfirmPasswordController.clear();
+  }
+
+  void _clearSignInControllers() {
+    signInEmailController.clear();
+    signInPasswordController.clear();
   }
 
   @override
   void onClose() {
-    nameController.dispose();
-    emailController.dispose();
-    passwordController.dispose();
-    confirmPasswordController.dispose();
+    signUpNameController.dispose();
+    signUpEmailController.dispose();
+    signUpPasswordController.dispose();
+    signUpConfirmPasswordController.dispose();
+    signInEmailController.dispose();
+    signInPasswordController.dispose();
     super.onClose();
   }
 }

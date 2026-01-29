@@ -24,6 +24,7 @@ class ThemeController extends GetxController {
   Future<void> toggleTheme() async {
     try {
       isDarkMode.value = !isDarkMode.value;
+      update();
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('isDarkMode', isDarkMode.value);
     } catch (e) {

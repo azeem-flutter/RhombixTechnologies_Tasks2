@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../themes/app_colors.dart';
 import '../themes/app_text_styles.dart';
 
@@ -36,11 +38,24 @@ class _SplashScreenState extends State<SplashScreen>
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeIn));
 
     _controller.forward();
+    _decideNavigation();
+  }
 
-    // Auto-navigate to onboarding after 2.5 seconds
-    Future.delayed(const Duration(milliseconds: 2500), () {
-      Get.offNamed('/onboarding');
-    });
+  Future<void> _decideNavigation() async {
+    final box = GetStorage();
+
+    await Future.delayed(const Duration(milliseconds: 2500));
+
+    final bool onboardingDone = box.read('onboardingDone') ?? false;
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (!onboardingDone) {
+      Get.offAllNamed('/onboarding');
+    } else if (user != null) {
+      Get.offAllNamed('/home');
+    } else {
+      Get.offAllNamed('/signin');
+    }
   }
 
   @override
@@ -60,7 +75,10 @@ class _SplashScreenState extends State<SplashScreen>
               ? const LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                  colors: [
+                    AppColors.backgroundDark,
+                    AppColors.cardBackgroundDark,
+                  ],
                 )
               : AppColors.primaryGradient,
         ),
@@ -75,42 +93,17 @@ class _SplashScreenState extends State<SplashScreen>
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // App Icon/Logo
-                      Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(30),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: .2),
-                              blurRadius: 20,
-                              offset: const Offset(0, 10),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.palette,
-                          size: 60,
-                          color: AppColors.primary,
-                        ),
+                      const Icon(
+                        Icons.palette_rounded,
+                        size: 100,
+                        color: Colors.white,
                       ),
                       const SizedBox(height: 30),
-                      // App Name
                       Text(
                         'ArtHub',
                         style: AppTextStyles.heading1.copyWith(
                           color: Colors.white,
-                          fontSize: 48,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Discover Amazing Art',
-                        style: AppTextStyles.body.copyWith(
-                          color: Colors.white.withValues(alpha: .9),
+                          fontSize: 42,
                         ),
                       ),
                     ],

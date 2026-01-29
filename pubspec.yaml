@@ -13,8 +13,9 @@ dependencies:
 
   # State Management
   get: ^4.7.3
+  get_storage: 2.1.1
 
-  # Firebase (compatible with Flutter 3.38)
+  # Firebase
   firebase_core: ^4.4.0
   firebase_auth: ^6.1.4
   cloud_firestore: ^6.1.2
@@ -28,23 +29,16 @@ dependencies:
   # Utilities
   intl: ^0.19.0
   shared_preferences: ^2.3.2
+  flutter_dotenv: ^5.1.0   # ✅ ADDED
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
-  # Linting
   flutter_lints: ^6.0.0
 
 flutter:
   uses-material-design: true
 
-  # Add your assets here if needed
-  # assets:
-  #   - assets/images/
-
-  # Add custom fonts here if needed
-  # fonts:
-  #   - family: MyFont
-  #     fonts:
-  #       - asset: fonts/MyFont-Regular.ttf
+  assets:
+    - .env 

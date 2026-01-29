@@ -1,17 +1,46 @@
+import 'dart:convert';
+
+import 'package:arthub/app/controllers/profile_controller.dart';
+import 'package:arthub/app/repositories/artwork_repository.dart';
+import 'package:arthub/app/services/cloudinary_configure.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get/get.dart';
-// import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
+
 import '../models/artwork_model.dart';
-import '../utils/constants.dart';
+import '../services/error_service.dart';
 
 class ArtworkController extends GetxController {
-  // final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirestoreArtworkRepository _repository = FirestoreArtworkRepository();
 
-  final RxList<ArtworkModel> artworks = <ArtworkModel>[].obs;
-  final RxList<ArtworkModel> filteredArtworks = <ArtworkModel>[].obs;
-  final RxBool isLoading = false.obs;
-  final RxString selectedCategory = 'All'.obs;
-  final RxString searchQuery = ''.obs;
-  final Rx<ArtworkModel?> selectedArtwork = Rx<ArtworkModel?>(null);
+  final artworks = <ArtworkModel>[].obs;
+  final filteredArtworks = <ArtworkModel>[].obs;
+  final isLoading = false.obs;
+
+  final selectedCategory = 'All'.obs;
+  final searchQuery = ''.obs;
+
+  final selectedImage = Rx<XFile?>(null);
+  final selectedCategoryUpload = RxnString(); // nullable string
+
+  final isUploading = false.obs;
+
+  final ImagePicker _picker = ImagePicker();
+
+  final selectedArtworkId = ''.obs;
+
+  void selectArtwork(String artworkId) {
+    selectedArtworkId.value = artworkId;
+  }
+
+  ArtworkModel? get selectedArtwork {
+    try {
+      return artworks.firstWhere((art) => art.id == selectedArtworkId.value);
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   void onInit() {
@@ -19,51 +48,112 @@ class ArtworkController extends GetxController {
     fetchArtworks();
   }
 
-  // Fetch all artworks from Firestore
-  // Use ArtworkController to fetch artworks from Firestore
+  Future<void> pickImage() async {
+    selectedImage.value = await _picker.pickImage(source: ImageSource.gallery);
+  }
+
+  Future<String> _uploadImageToCloudinary(XFile image) async {
+    final uri = Uri.parse(
+      'https://api.cloudinary.com/v1_1/${CloudinaryConfig.cloudName}/image/upload',
+    );
+
+    final request = http.MultipartRequest('POST', uri)
+      ..fields['upload_preset'] = CloudinaryConfig.arthubartwork
+      ..files.add(await http.MultipartFile.fromPath('file', image.path));
+
+    final response = await request.send();
+    final body = await response.stream.bytesToString();
+    final data = jsonDecode(body);
+
+    if (response.statusCode != 200) {
+      throw Exception(data['error']['message']);
+    }
+
+    return data['secure_url'];
+  }
+
+  Future<void> submitArtworkUpload({
+    required String title,
+    required String description,
+  }) async {
+    if (selectedImage.value == null) {
+      ErrorService.showError('Please select an image');
+      return;
+    }
+
+    if (selectedCategoryUpload.value == null) {
+      ErrorService.showError('Please select a category');
+      return;
+    }
+
+    try {
+      isUploading.value = true;
+
+      final user = ProfileController.instance.user;
+      final docRef = FirebaseFirestore.instance.collection('artworks').doc();
+
+      // 🔥 Upload image to Cloudinary
+      final imageUrl = await _uploadImageToCloudinary(selectedImage.value!);
+
+      final artwork = ArtworkModel(
+        id: docRef.id,
+        title: title.trim(),
+        description: description.trim(),
+        imageUrl: imageUrl,
+        category: selectedCategoryUpload.string,
+        artistId: user!.id,
+        artistName: user.name,
+        artistImage: user.profileImage,
+        createdAt: Timestamp.now(),
+      );
+
+      await _repository.uploadArtwork(artwork);
+      await fetchArtworks();
+
+      selectedImage.value = null;
+
+      Get.back();
+      ErrorService.showSuccess('Artwork uploaded');
+    } catch (e) {
+      ErrorService.handleError(e);
+    } finally {
+      isUploading.value = false;
+    }
+  }
+
+  void removeSelectedImage() {
+    selectedImage.value = null;
+  }
+
   Future<void> fetchArtworks() async {
     try {
       isLoading.value = true;
-
-      // TODO: Fetch from Firestore
-      // QuerySnapshot snapshot = await _firestore
-      //     .collection('artworks')
-      //     .orderBy('createdAt', descending: true)
-      //     .get();
-      //
-      // artworks.value = snapshot.docs
-      //     .map((doc) => ArtworkModel.fromMap(doc.data() as Map<String, dynamic>))
-      //     .toList();
-
-      // Demo data
-      artworks.value = _getDummyArtworks();
-      filteredArtworks.value = artworks;
+      artworks.value = await _repository.fetchArtworks();
+      _applyFilters();
     } catch (e) {
-      Get.snackbar('Error', 'Failed to fetch artworks');
+      ErrorService.handleError(e);
     } finally {
       isLoading.value = false;
     }
   }
 
-  // Filter artworks by category
   void filterByCategory(String category) {
     selectedCategory.value = category;
     _applyFilters();
   }
 
-  // Search artworks
   void searchArtworks(String query) {
     searchQuery.value = query;
     _applyFilters();
   }
 
-  // Apply filters (category + search)
   void _applyFilters() {
     filteredArtworks.value = artworks.where((artwork) {
-      bool matchesCategory =
+      final categoryMatch =
           selectedCategory.value == 'All' ||
           artwork.category == selectedCategory.value;
-      bool matchesSearch =
+
+      final searchMatch =
           searchQuery.value.isEmpty ||
           artwork.title.toLowerCase().contains(
             searchQuery.value.toLowerCase(),
@@ -71,160 +161,45 @@ class ArtworkController extends GetxController {
           artwork.artistName.toLowerCase().contains(
             searchQuery.value.toLowerCase(),
           );
-      return matchesCategory && matchesSearch;
+
+      return categoryMatch && searchMatch;
     }).toList();
   }
 
-  // Like/Unlike artwork
-  // Firestore: Increment likes count and add userId to likedBy array
+  /// Toggle like for an artwork. NO optimistic UI updates.
+  /// UI will update when Firestore stream reflects the change.
   Future<void> toggleLike(String artworkId, String userId) async {
     try {
-      final index = artworks.indexWhere((a) => a.id == artworkId);
-      if (index == -1) return;
-
-      final artwork = artworks[index];
-      final isLiked = artwork.likedBy.contains(userId);
-
-      // TODO: Update Firestore
-      // if (isLiked) {
-      //   await _firestore.collection('artworks').doc(artworkId).update({
-      //     'likes': FieldValue.increment(-1),
-      //     'likedBy': FieldValue.arrayRemove([userId]),
-      //   });
-      // } else {
-      //   await _firestore.collection('artworks').doc(artworkId).update({
-      //     'likes': FieldValue.increment(1),
-      //     'likedBy': FieldValue.arrayUnion([userId]),
-      //   });
-      // }
-
-      // Update local state
-      final updatedLikedBy = List<String>.from(artwork.likedBy);
-      if (isLiked) {
-        updatedLikedBy.remove(userId);
-        artworks[index] = artwork.copyWith(
-          likes: artwork.likes - 1,
-          likedBy: updatedLikedBy,
-        );
-      } else {
-        updatedLikedBy.add(userId);
-        artworks[index] = artwork.copyWith(
-          likes: artwork.likes + 1,
-          likedBy: updatedLikedBy,
-        );
-      }
-
-      artworks.refresh();
-      _applyFilters();
+      await _repository.toggleLike(artworkId, userId);
+      // UI updates automatically via streams in the view layer
     } catch (e) {
-      Get.snackbar('Error', 'Failed to update like');
+      ErrorService.handleError(e);
     }
   }
 
-  // Get artwork by ID
-  void selectArtwork(String artworkId) {
-    selectedArtwork.value = artworks.firstWhereOrNull((a) => a.id == artworkId);
+  /// Increment view count (idempotent per user per artwork).
+  /// Only call once when the details screen opens, not on every build().
+  Future<void> incrementViewOnce(String artworkId, String userId) async {
+    try {
+      await _repository.incrementViewOnce(artworkId, userId);
+    } catch (e) {
+      print('Error incrementing view: $e');
+      // Non-critical; don't show error to user
+    }
   }
 
-  // Increment view count
-  // Firestore: Increment views count
-  Future<void> incrementViews(String artworkId) async {
-    // TODO: Update in Firestore
-    // await _firestore.collection('artworks').doc(artworkId).update({
-    //   'views': FieldValue.increment(1),
-    // });
+  /// Get stream of like count for an artwork
+  Stream<int> getLikeCountStream(String artworkId) {
+    return _repository.getLikeCountStream(artworkId);
   }
 
-  // Dummy data for demo
-  List<ArtworkModel> _getDummyArtworks() {
-    return [
-      ArtworkModel(
-        id: '1',
-        title: 'Neon Dreams',
-        imageUrl:
-            'https://images.unsplash.com/photo-1549887534-1541e9326642?w=800',
-        description:
-            'A cyberpunk-inspired digital artwork featuring neon lights and futuristic architecture.',
-        category: 'Digital Art',
-        artistId: 'artist1',
-        artistName: 'Sarah Chen',
-        likes: 234,
-        likedBy: [],
-        createdAt: DateTime.now().subtract(const Duration(days: 2)),
-        views: 1240,
-      ),
-      ArtworkModel(
-        id: '2',
-        title: 'Mountain Serenity',
-        imageUrl:
-            'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800',
-        description:
-            'Breathtaking landscape photography capturing the beauty of mountain ranges at sunset.',
-        category: 'Photography',
-        artistId: 'artist2',
-        artistName: 'Alex Rivera',
-        likes: 567,
-        likedBy: [],
-        createdAt: DateTime.now().subtract(const Duration(days: 5)),
-        views: 2341,
-      ),
-      ArtworkModel(
-        id: '3',
-        title: 'Abstract Emotions',
-        imageUrl:
-            'https://images.unsplash.com/photo-1541961017774-22349e4a1262?w=800',
-        description:
-            'An exploration of color and form through abstract expressionism.',
-        category: 'Abstract',
-        artistId: 'artist3',
-        artistName: 'Maya Patel',
-        likes: 189,
-        likedBy: [],
-        createdAt: DateTime.now().subtract(const Duration(days: 1)),
-        views: 876,
-      ),
-      ArtworkModel(
-        id: '4',
-        title: 'Character Study #12',
-        imageUrl:
-            'https://images.unsplash.com/photo-1578301978693-85fa9c0320b9?w=800',
-        description: 'Original character design for fantasy RPG project.',
-        category: 'Character Design',
-        artistId: 'artist4',
-        artistName: 'Jordan Lee',
-        likes: 432,
-        likedBy: [],
-        createdAt: DateTime.now().subtract(const Duration(days: 3)),
-        views: 1567,
-      ),
-      ArtworkModel(
-        id: '5',
-        title: 'Urban Jungle',
-        imageUrl:
-            'https://images.unsplash.com/photo-1499781350541-7783f6c6a0c8?w=800',
-        description: 'Street photography capturing the essence of city life.',
-        category: 'Photography',
-        artistId: 'artist5',
-        artistName: 'Emma Watson',
-        likes: 321,
-        likedBy: [],
-        createdAt: DateTime.now().subtract(const Duration(days: 7)),
-        views: 1893,
-      ),
-      ArtworkModel(
-        id: '6',
-        title: 'Geometric Harmony',
-        imageUrl:
-            'https://images.unsplash.com/photo-1557672172-298e090bd0f1?w=800',
-        description: 'Minimalist geometric patterns in vibrant colors.',
-        category: 'Abstract',
-        artistId: 'artist6',
-        artistName: 'Lucas Kim',
-        likes: 278,
-        likedBy: [],
-        createdAt: DateTime.now().subtract(const Duration(days: 4)),
-        views: 1234,
-      ),
-    ];
+  /// Get stream of view count for an artwork
+  Stream<int> getViewCountStream(String artworkId) {
+    return _repository.getViewCountStream(artworkId);
+  }
+
+  /// Get stream of whether current user has liked this artwork
+  Stream<bool> isLikedStream(String artworkId, String userId) {
+    return _repository.isLikedStream(artworkId, userId);
   }
 }
