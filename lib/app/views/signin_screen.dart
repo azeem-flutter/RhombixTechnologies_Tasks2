@@ -14,7 +14,6 @@ class SignInScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final AuthController authController = Get.find<AuthController>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    const bool isDemomode = true;
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.backgroundDark : AppColors.background,
@@ -113,11 +112,8 @@ class SignInScreen extends StatelessWidget {
                               controller:
                                   authController.signInPasswordController,
                               validator: Validators.validatePassword,
-                              obscureText: isDemomode
-                                  ? false
-                                  : !authController
-                                        .isSignInPasswordVisible
-                                        .value,
+                              obscureText:
+                                  !authController.isSignInPasswordVisible.value,
                               prefixIcon: const Icon(Icons.lock_outline),
                               suffixIcon: IconButton(
                                 icon: Icon(
