@@ -23,7 +23,6 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  dotenv()
   await dotenv.load(fileName: ".env");
 
   Get.put(ThemeController(), permanent: true);

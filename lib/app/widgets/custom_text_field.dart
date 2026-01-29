@@ -48,6 +48,9 @@ class CustomTextField extends StatelessWidget {
           maxLines: obscureText ? 1 : maxLines,
           maxLength: maxLength,
           style: AppTextStyles.body,
+          onTap: () {
+            FocusScope.of(context).unfocus();
+          },
           decoration: InputDecoration(
             hintText: hint ?? label,
             hintStyle: AppTextStyles.bodySmall.copyWith(
